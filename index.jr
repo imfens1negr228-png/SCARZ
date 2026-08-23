@@ -1,0 +1,1353 @@
+const {
+
+    Client,
+
+    GatewayIntentBits,
+
+    PermissionsBitField,
+
+    EmbedBuilder,
+
+    ActionRowBuilder,
+
+    ButtonBuilder,
+
+    ButtonStyle,
+
+    ModalBuilder,
+
+    TextInputBuilder,
+
+    TextInputStyle,
+
+    Events,
+
+    ChannelType
+
+} = require("discord.js");
+
+
+
+// ==================================================
+
+// CONFIG
+
+// ==================================================
+
+
+
+const TOKEN = process.env.DISCORD_TOKEN;
+
+
+
+const GUILD_ID = process.env.GUILD_ID;
+
+const CATEGORY_ID = process.env.CATEGORY_ID;
+
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+
+const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID;
+
+const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID;
+
+
+
+// ==================================================
+
+// CLIENT
+
+// ==================================================
+
+
+
+const client = new Client({
+
+    intents: [
+
+        GatewayIntentBits.Guilds,
+
+        GatewayIntentBits.GuildMembers
+
+    ]
+
+});
+
+
+
+// userId -> application channel
+
+const applications = new Map();
+
+
+
+// ==================================================
+
+// READY
+
+// ==================================================
+
+
+
+client.once(Events.ClientReady, async () => {
+
+
+
+    console.log("--------------------------------");
+
+    console.log(`Bot: ${client.user.tag}`);
+
+    console.log("Status: ONLINE");
+
+    console.log("--------------------------------");
+
+
+
+    const guild = await client.guilds.fetch(GUILD_ID);
+
+
+
+    await guild.commands.set([
+
+        {
+
+            name: "setup",
+
+            description: "Создать панель заявок"
+
+        }
+
+    ]);
+
+
+
+    console.log("Slash-команды зарегистрированы.");
+
+});
+
+
+
+// ==================================================
+
+// SETUP
+
+// ==================================================
+
+
+
+client.on(Events.InteractionCreate, async interaction => {
+
+
+
+    if (!interaction.isChatInputCommand()) return;
+
+
+
+    if (interaction.commandName !== "setup") return;
+
+
+
+    if (!interaction.member.permissions.has(
+
+        PermissionsBitField.Flags.Administrator
+
+    )) {
+
+        return interaction.reply({
+
+            content: "❌ У тебя нет прав администратора.",
+
+            ephemeral: true
+
+        });
+
+    }
+
+
+
+    const embed = new EmbedBuilder()
+
+        .setColor(0x181818)
+
+        .setTitle("📋 ЗАЯВКИ")
+
+        .setDescription(
+
+            "### Добро пожаловать!\n\n" +
+
+            "Чтобы подать заявку, нажми кнопку ниже.\n\n" +
+
+            "После заполнения анкеты бот создаст приватный канал, " +
+
+            "который будет доступен тебе и руководству.\n\n" +
+
+            "⏳ **Ожидай решения после подачи заявки.**"
+
+        )
+
+        .setFooter({
+
+            text: "Application System"
+
+        });
+
+
+
+    const row = new ActionRowBuilder()
+
+        .addComponents(
+
+            new ButtonBuilder()
+
+                .setCustomId("application_create")
+
+                .setLabel("Подать заявку")
+
+                .setEmoji("📝")
+
+                .setStyle(ButtonStyle.Primary)
+
+        );
+
+
+
+    await interaction.channel.send({
+
+        embeds: [embed],
+
+        components: [row]
+
+    });
+
+
+
+    await interaction.reply({
+
+        content: "✅ Панель заявок создана.",
+
+        ephemeral: true
+
+    });
+
+});
+
+
+
+// ==================================================
+
+// BUTTONS
+
+// ==================================================
+
+
+
+client.on(Events.InteractionCreate, async interaction => {
+
+
+
+    if (!interaction.isButton()) return;
+
+
+
+    // ----------------------------------------------
+
+    // CREATE APPLICATION
+
+    // ----------------------------------------------
+
+
+
+    if (interaction.customId === "application_create") {
+
+
+
+        if (applications.has(interaction.user.id)) {
+
+
+
+            const channelId =
+
+                applications.get(interaction.user.id);
+
+
+
+            const channel =
+
+                interaction.guild.channels.cache.get(channelId);
+
+
+
+            if (channel) {
+
+
+
+                return interaction.reply({
+
+                    content:
+
+                        `⏳ У тебя уже есть заявка: ${channel}`,
+
+                    ephemeral: true
+
+                });
+
+            }
+
+
+
+            applications.delete(interaction.user.id);
+
+        }
+
+
+
+        const modal = new ModalBuilder()
+
+            .setCustomId("application_modal")
+
+            .setTitle("Заявка");
+
+
+
+        const nickname = new TextInputBuilder()
+
+            .setCustomId("nickname")
+
+            .setLabel("Игровой ник")
+
+            .setPlaceholder("Введите игровой ник")
+
+            .setStyle(TextInputStyle.Short)
+
+            .setRequired(true)
+
+            .setMaxLength(50);
+
+
+
+        const age = new TextInputBuilder()
+
+            .setCustomId("age")
+
+            .setLabel("Возраст")
+
+            .setPlaceholder("Например: 16")
+
+            .setStyle(TextInputStyle.Short)
+
+            .setRequired(true)
+
+            .setMaxLength(3);
+
+
+
+        const experience = new TextInputBuilder()
+
+            .setCustomId("experience")
+
+            .setLabel("Опыт")
+
+            .setPlaceholder("Расскажите о своём опыте")
+
+            .setStyle(TextInputStyle.Paragraph)
+
+            .setRequired(true)
+
+            .setMaxLength(500);
+
+
+
+        const online = new TextInputBuilder()
+
+            .setCustomId("online")
+
+            .setLabel("Онлайн")
+
+            .setPlaceholder("Сколько часов в день?")
+
+            .setStyle(TextInputStyle.Short)
+
+            .setRequired(true)
+
+            .setMaxLength(50);
+
+
+
+        const reason = new TextInputBuilder()
+
+            .setCustomId("reason")
+
+            .setLabel("Почему именно мы?")
+
+            .setPlaceholder("Расскажите о себе")
+
+            .setStyle(TextInputStyle.Paragraph)
+
+            .setRequired(true)
+
+            .setMaxLength(1000);
+
+
+
+        modal.addComponents(
+
+            new ActionRowBuilder().addComponents(nickname),
+
+            new ActionRowBuilder().addComponents(age),
+
+            new ActionRowBuilder().addComponents(experience),
+
+            new ActionRowBuilder().addComponents(online),
+
+            new ActionRowBuilder().addComponents(reason)
+
+        );
+
+
+
+        return interaction.showModal(modal);
+
+    }
+
+
+
+    // ----------------------------------------------
+
+    // TAKE APPLICATION
+
+    // ----------------------------------------------
+
+
+
+    if (interaction.customId.startsWith("application_take:")) {
+
+
+
+        if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+
+            return interaction.reply({
+
+                content: "❌ У тебя нет доступа.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        const userId =
+
+            interaction.customId.split(":")[1];
+
+
+
+        const embed = EmbedBuilder.from(
+
+            interaction.message.embeds[0]
+
+        )
+
+            .setColor(0x3498db)
+
+            .setFooter({
+
+                text: `Рассматривает: ${interaction.user.tag}`
+
+            });
+
+
+
+        await interaction.update({
+
+            embeds: [embed]
+
+        });
+
+
+
+        return interaction.followUp({
+
+            content:
+
+                `🔍 Заявку рассматривает ${interaction.user}.`,
+
+            ephemeral: false
+
+        });
+
+    }
+
+
+
+    // ----------------------------------------------
+
+    // ACCEPT
+
+    // ----------------------------------------------
+
+
+
+    if (interaction.customId.startsWith("application_accept:")) {
+
+
+
+        if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+
+            return interaction.reply({
+
+                content: "❌ У тебя нет доступа.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        const userId =
+
+            interaction.customId.split(":")[1];
+
+
+
+        const member =
+
+            await interaction.guild.members
+
+                .fetch(userId)
+
+                .catch(() => null);
+
+
+
+        if (!member) {
+
+            return interaction.reply({
+
+                content: "❌ Пользователь не найден.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        const role =
+
+            interaction.guild.roles.cache.get(MEMBER_ROLE_ID);
+
+
+
+        if (!role) {
+
+            return interaction.reply({
+
+                content: "❌ Роль не найдена.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        try {
+
+
+
+            await member.roles.add(
+
+                role,
+
+                "Заявка принята"
+
+            );
+
+
+
+        } catch (error) {
+
+
+
+            console.error(error);
+
+
+
+            return interaction.reply({
+
+                content:
+
+                    "❌ Не удалось выдать роль. " +
+
+                    "Проверь позицию роли бота.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        await sendLog(
+
+            interaction.guild,
+
+            "✅ Заявка принята",
+
+            `Пользователь: ${member}\n` +
+
+            `Рассмотрел: ${interaction.user}`
+
+        );
+
+
+
+        try {
+
+
+
+            await member.send(
+
+                "🎉 Твоя заявка была **принята**!\n" +
+
+                "Добро пожаловать!"
+
+            );
+
+
+
+        } catch {}
+
+
+
+        applications.delete(userId);
+
+
+
+        await interaction.update({
+
+            content: "✅ Заявка принята.",
+
+            embeds: [],
+
+            components: []
+
+        });
+
+
+
+        setTimeout(async () => {
+
+
+
+            await interaction.channel.delete()
+
+                .catch(() => {});
+
+
+
+        }, 5000);
+
+
+
+        return;
+
+    }
+
+
+
+    // ----------------------------------------------
+
+    // DENY
+
+    // ----------------------------------------------
+
+
+
+    if (interaction.customId.startsWith("application_deny:")) {
+
+
+
+        if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+
+            return interaction.reply({
+
+                content: "❌ У тебя нет доступа.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        const userId =
+
+            interaction.customId.split(":")[1];
+
+
+
+        const modal = new ModalBuilder()
+
+            .setCustomId(
+
+                `application_deny_modal:${userId}`
+
+            )
+
+            .setTitle("Причина отказа");
+
+
+
+        const reason = new TextInputBuilder()
+
+            .setCustomId("deny_reason")
+
+            .setLabel("Причина отказа")
+
+            .setPlaceholder(
+
+                "Напишите причину..."
+
+            )
+
+            .setStyle(TextInputStyle.Paragraph)
+
+            .setRequired(true)
+
+            .setMaxLength(500);
+
+
+
+        modal.addComponents(
+
+            new ActionRowBuilder().addComponents(reason)
+
+        );
+
+
+
+        return interaction.showModal(modal);
+
+    }
+
+});
+
+
+
+// ==================================================
+
+// MODAL
+
+// ==================================================
+
+
+
+client.on(Events.InteractionCreate, async interaction => {
+
+
+
+    if (!interaction.isModalSubmit()) return;
+
+
+
+    // ----------------------------------------------
+
+    // APPLICATION
+
+    // ----------------------------------------------
+
+
+
+    if (interaction.customId === "application_modal") {
+
+
+
+        const guild = interaction.guild;
+
+        const user = interaction.user;
+
+
+
+        const category =
+
+            guild.channels.cache.get(CATEGORY_ID);
+
+
+
+        const staffRole =
+
+            guild.roles.cache.get(STAFF_ROLE_ID);
+
+
+
+        if (!category || category.type !== ChannelType.GuildCategory) {
+
+
+
+            return interaction.reply({
+
+                content: "❌ Категория заявок не найдена.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        if (!staffRole) {
+
+
+
+            return interaction.reply({
+
+                content: "❌ Роль персонала не найдена.",
+
+                ephemeral: true
+
+            });
+
+        }
+
+
+
+        const nickname =
+
+            interaction.fields.getTextInputValue("nickname");
+
+
+
+        const age =
+
+            interaction.fields.getTextInputValue("age");
+
+
+
+        const experience =
+
+            interaction.fields.getTextInputValue("experience");
+
+
+
+        const online =
+
+            interaction.fields.getTextInputValue("online");
+
+
+
+        const reason =
+
+            interaction.fields.getTextInputValue("reason");
+
+
+
+        const channelName =
+
+            `заявка-${user.username}`
+
+                .toLowerCase()
+
+                .replace(/[^a-z0-9а-яё_-]/gi, "-")
+
+                .slice(0, 90);
+
+
+
+        const channel =
+
+            await guild.channels.create({
+
+                name: channelName,
+
+                type: ChannelType.GuildText,
+
+                parent: category.id,
+
+
+
+                permissionOverwrites: [
+
+
+
+                    {
+
+                        id: guild.id,
+
+
+
+                        deny: [
+
+                            PermissionsBitField.Flags.ViewChannel
+
+                        ]
+
+                    },
+
+
+
+                    {
+
+                        id: user.id,
+
+
+
+                        allow: [
+
+                            PermissionsBitField.Flags.ViewChannel,
+
+                            PermissionsBitField.Flags.SendMessages,
+
+                            PermissionsBitField.Flags.ReadMessageHistory
+
+                        ]
+
+                    },
+
+
+
+                    {
+
+                        id: staffRole.id,
+
+
+
+                        allow: [
+
+                            PermissionsBitField.Flags.ViewChannel,
+
+                            PermissionsBitField.Flags.SendMessages,
+
+                            PermissionsBitField.Flags.ReadMessageHistory
+
+                        ]
+
+                    }
+
+                ]
+
+            });
+
+
+
+        applications.set(
+
+            user.id,
+
+            channel.id
+
+        );
+
+
+
+        const embed = new EmbedBuilder()
+
+            .setColor(0xf1c40f)
+
+            .setTitle("📋 Новая заявка")
+
+            .setDescription(
+
+                `Заявитель: ${user}\n\n` +
+
+                "⏳ **Статус: ожидает рассмотрения**"
+
+            )
+
+            .addFields(
+
+                {
+
+                    name: "🎮 Игровой ник",
+
+                    value: nickname,
+
+                    inline: true
+
+                },
+
+                {
+
+                    name: "🎂 Возраст",
+
+                    value: age,
+
+                    inline: true
+
+                },
+
+                {
+
+                    name: "🕐 Онлайн",
+
+                    value: online,
+
+                    inline: true
+
+                },
+
+                {
+
+                    name: "📚 Опыт",
+
+                    value: experience
+
+                },
+
+                {
+
+                    name: "💬 Почему именно мы?",
+
+                    value: reason
+
+                }
+
+            )
+
+            .setTimestamp();
+
+
+
+        const buttons =
+
+            new ActionRowBuilder()
+
+                .addComponents(
+
+
+
+                    new ButtonBuilder()
+
+                        .setCustomId(
+
+                            `application_take:${user.id}`
+
+                        )
+
+                        .setLabel("Рассмотреть")
+
+                        .setEmoji("🔍")
+
+                        .setStyle(
+
+                            ButtonStyle.Primary
+
+                        ),
+
+
+
+                    new ButtonBuilder()
+
+                        .setCustomId(
+
+                            `application_accept:${user.id}`
+
+                        )
+
+                        .setLabel("Принять")
+
+                        .setEmoji("✅")
+
+                        .setStyle(
+
+                            ButtonStyle.Success
+
+                        ),
+
+
+
+                    new ButtonBuilder()
+
+                        .setCustomId(
+
+                            `application_deny:${user.id}`
+
+                        )
+
+                        .setLabel("Отклонить")
+
+                        .setEmoji("❌")
+
+                        .setStyle(
+
+                            ButtonStyle.Danger
+
+                        )
+
+                );
+
+
+
+        await channel.send({
+
+            content:
+
+                `${user} ${staffRole}`,
+
+            embeds: [embed],
+
+            components: [buttons]
+
+        });
+
+
+
+        await sendLog(
+
+            guild,
+
+            "📝 Новая заявка",
+
+            `Пользователь: ${user}\n` +
+
+            `Канал: ${channel}`
+
+        );
+
+
+
+        return interaction.reply({
+
+            content:
+
+                `✅ Заявка создана: ${channel}`,
+
+            ephemeral: true
+
+        });
+
+    }
+
+
+
+    // ----------------------------------------------
+
+    // DENY REASON
+
+    // ----------------------------------------------
+
+
+
+    if (
+
+        interaction.customId.startsWith(
+
+            "application_deny_modal:"
+
+        )
+
+    ) {
+
+
+
+        const userId =
+
+            interaction.customId.split(":")[1];
+
+
+
+        const reason =
+
+            interaction.fields.getTextInputValue(
+
+                "deny_reason"
+
+            );
+
+
+
+        const member =
+
+            await interaction.guild.members
+
+                .fetch(userId)
+
+                .catch(() => null);
+
+
+
+        await sendLog(
+
+            interaction.guild,
+
+            "❌ Заявка отклонена",
+
+            `Пользователь: <@${userId}>\n` +
+
+            `Рассмотрел: ${interaction.user}\n` +
+
+            `Причина: ${reason}`
+
+        );
+
+
+
+        if (member) {
+
+
+
+            try {
+
+
+
+                await member.send(
+
+                    `❌ Твоя заявка была отклонена.\n\n` +
+
+                    `**Причина:** ${reason}`
+
+                );
+
+
+
+            } catch {}
+
+        }
+
+
+
+        applications.delete(userId);
+
+
+
+        await interaction.reply({
+
+            content:
+
+                `❌ Заявка отклонена.\n` +
+
+                `Причина: ${reason}`,
+
+            ephemeral: false
+
+        });
+
+
+
+        setTimeout(async () => {
+
+
+
+            await interaction.channel.delete()
+
+                .catch(() => {});
+
+
+
+        }, 5000);
+
+    }
+
+});
+
+
+
+// ==================================================
+
+// LOGS
+
+// ==================================================
+
+
+
+async function sendLog(
+
+    guild,
+
+    title,
+
+    description
+
+) {
+
+
+
+    const channel =
+
+        guild.channels.cache.get(
+
+            LOG_CHANNEL_ID
+
+        );
+
+
+
+    if (!channel) return;
+
+
+
+    const embed =
+
+        new EmbedBuilder()
+
+            .setColor(0x5865f2)
+
+            .setTitle(title)
+
+            .setDescription(description)
+
+            .setTimestamp();
+
+
+
+    await channel.send({
+
+        embeds: [embed]
+
+    });
+
+}
+
+
+
+// ==================================================
+
+// ERROR
+
+// ==================================================
+
+
+
+client.on(Events.Error, error => {
+
+    console.error("Discord error:", error);
+
+});
+
+
+
+// ==================================================
+
+// START
+
+// ==================================================
+
+
+
+if (!TOKEN) {
+
+
+
+    console.error(
+
+        "❌ DISCORD_TOKEN не найден!"
+
+    );
+
+
+
+    process.exit(1);
+
+}
+
+
+
+client.login(TOKEN);
